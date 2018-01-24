@@ -7,6 +7,7 @@ from __future__ import absolute_import, division, print_function
 import sys
 import os
 import time
+from . import constants
 
 import numpy as np
 
@@ -281,3 +282,30 @@ def distribute_work(nproc, ids, weights=None):
             dist.append( list() )
 
     return dist
+def transmitted_flux_fraction(zObj,lObs):
+    """Calculate the transmitted flux fraction from the Lyman series
+
+    This returns the transmitted flux fraction:
+        1 -> everything is transmitted (medium is transparent)
+        0 -> nothing is transmitted (medium is opaque)
+
+    Args:
+        zObj (float): Redshift of object
+        lObs (array of float): wavelength grid
+
+    Returns:
+        array of float: transmitted flux fraction
+
+    """
+
+    lRF = lObs/(1.+zObj)
+    T   = np.ones(lObs.size)
+
+    Lyman_series = constants.Lyman_series
+    for l in list(Lyman_series.keys()):
+        w      = lRF<Lyman_series[l]['line']
+        zpix   = lObs[w]/Lyman_series[l]['line']-1.
+        tauEff = Lyman_series[l]['A']*(1.+zpix)**Lyman_series[l]['B']
+        T[w]  *= np.exp(-tauEff)
+
+    return T
