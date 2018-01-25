@@ -165,8 +165,24 @@ def fitz(zchi2, redshifts, spectra, template, nminima=3):
             binned = rebin_template(template, z, dwave)
             for k in list(dwave.keys()):
                 binned[k][:,0] *= transmitted_flux_fraction(z,dwave[k])
-            zzchi2[i], zzcoeff[i] = calc_zchi2_one(spectra, weights, flux,
-                wflux, binned)
+
+            tmp_weights = weights.copy()
+            tmp_wflux = wflux.copy()
+            tmp_wave = np.concatenate([ s.wave for s in spectra ])
+            tmp_waveRF = tmp_wave/(1.+z)
+            T = transmitted_flux_fraction(z,tmp_wave)
+            w = (T!=1.) & (tmp_weights>1.)
+            tmp_weights[w] = 1.
+            for l in [1215.67,1548.2049]:
+                w = tmp_waveRF<l
+                if w.sum()<50:
+                    w &= (tmp_weights>1.)
+                    tmp_weights[w] = 1.
+
+            tmp_wflux = tmp_weights*flux
+
+            zzchi2[i], zzcoeff[i] = calc_zchi2_one(spectra, tmp_weights, flux,
+                tmp_wflux, binned)
 
         #- fit parabola to 3 points around minimum
         i = min(max(np.argmin(zzchi2),1), len(zz)-2)
@@ -176,7 +192,21 @@ def fitz(zchi2, redshifts, spectra, template, nminima=3):
             binned = rebin_template(template, zmin, dwave)
             for k in list(dwave.keys()):
                 binned[k][:,0] *= transmitted_flux_fraction(zmin,dwave[k])
-            coeff = calc_zchi2_one(spectra, weights, flux, wflux,
+
+            tmp_weights = weights.copy()
+            tmp_wflux = wflux.copy()
+            tmp_wave = np.concatenate([ s.wave for s in spectra ])
+            T = transmitted_flux_fraction(z,tmp_wave)
+            w = (T!=1.) & (tmp_weights>1.)
+            tmp_weights[w] = 1.
+            for l in [1215.67,1548.2049]:
+                w = tmp_waveRF<l
+                if w.sum()<50:
+                    w &= (tmp_weights>1.)
+                    tmp_weights[w] = 1.
+            tmp_wflux = tmp_weights*flux
+
+            coeff = calc_zchi2_one(spectra, tmp_weights, flux, tmp_wflux,
                 binned)[1]
         except ValueError as err:
             if zmin<redshifts[0] or redshifts[-1]<zmin:

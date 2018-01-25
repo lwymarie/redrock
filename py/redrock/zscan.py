@@ -16,7 +16,7 @@ import scipy.sparse
 
 from . import rebin
 
-from .utils import elapsed
+from .utils import elapsed, transmitted_flux_fraction
 
 from .targets import Spectrum, Target, DistTargets, distribute_targets
 
@@ -107,9 +107,10 @@ def calc_zchi2(target_ids, target_data, dtemplate, progress=None):
     zcoeff = np.zeros( (ntargets, nz, nbasis) )
 
     # Redshifts near [OII]; used only for galaxy templates
-    isOII = (3724 <= dtemplate.template.wave) & \
-        (dtemplate.template.wave <= 3733)
-    OIItemplate = dtemplate.template.flux[:,isOII].T
+    if dtemplate.template.template_type == 'GALAXY':
+        isOII = (3724 <= dtemplate.template.wave) & \
+            (dtemplate.template.wave <= 3733)
+        OIItemplate = dtemplate.template.flux[:,isOII].T
 
     for j in range(ntargets):
         (weights, flux, wflux) = spectral_data(target_data[j].spectra)
@@ -118,12 +119,27 @@ def calc_zchi2(target_ids, target_data, dtemplate, progress=None):
         # coefficients.  We use the pre-interpolated templates for each
         # unique wavelength range.
         for i, z in enumerate(dtemplate.local.redshifts):
+
+            tmp_weights = weights.copy()
+            tmp_wflux = wflux.copy()
+            tmp_wave = np.concatenate([ s.wave for s in target_data[j].spectra ])
+            tmp_waveRF = tmp_wave/(1.+z)
+            T = transmitted_flux_fraction(z,tmp_wave)
+            w = (T!=1.) & (tmp_weights>100.)
+            tmp_weights[w] = 100.
+            for l in [1215.67,1548.2049]:
+                w = tmp_waveRF<l
+                if w.sum()<200:
+                    w &= (tmp_weights>100.)
+                    tmp_weights[w] = 100.
+            tmp_wflux = tmp_weights*flux
+
             zchi2[j,i], zcoeff[j,i] = calc_zchi2_one(target_data[j].spectra,
-                weights, flux, wflux, dtemplate.local.data[i])
+                tmp_weights, flux, tmp_wflux, dtemplate.local.data[i])
 
         #- Penalize chi2 for negative [OII] flux; ad-hoc
-        for i, z in enumerate(dtemplate.local.redshifts):
-            if dtemplate.template.template_type == 'GALAXY':
+        if dtemplate.template.template_type == 'GALAXY':
+            for i, z in enumerate(dtemplate.local.redshifts):
                 OIIflux = np.sum( OIItemplate.dot(zcoeff[j,i]) )
                 if OIIflux < 0:
                     zchi2penalty[j,i] = -OIIflux
