@@ -13,7 +13,7 @@ from collections import OrderedDict
 from astropy.table import Table
 
 from .utils import mp_array, distribute_work
-
+from . import mpsharedmem
 
 class Spectrum(object):
     """Simple container class for an individual spectrum.
@@ -35,52 +35,57 @@ class Spectrum(object):
         self.R = R
         self.Rcsr = Rcsr
         self._mpshared = False
+        self._mpshmem = None
         self.wavehash = hash((len(wave), wave[0], wave[1], wave[-2], wave[-1]))
 
     def sharedmem_pack(self):
         """Pack spectral data into multiprocessing shared memory.
         """
         if not self._mpshared:
-            # Store data in multiprocessing shared memory
-            import multiprocessing as mp
-            self.wave = mp_array(self.wave)
-            self.flux = mp_array(self.flux)
-            self.ivar = mp_array(self.ivar)
-
-            self._ndiag = self.R.data.shape[0]
-            self._splen = self.R.data.shape[1]
-            self.R_offsets = mp_array(self.R.offsets)
-            self.R_data = mp_array(self.R.data)
+            if self._mpshmem is None:
+                self._mpshmem = dict()
+                self._mpshmem['wave'] = mpsharedmem.fromarray(self.wave)
+                self._mpshmem['flux'] = mpsharedmem.fromarray(self.flux)
+                self._mpshmem['ivar'] = mpsharedmem.fromarray(self.ivar)
+                self._mpshmem['R.data'] = mpsharedmem.fromarray(self.R.data)
+                self._mpshmem['R.offsets'] = self.R.offsets
+                self._mpshmem['R.shape'] = self.R.shape
+                self._mpshmem['Rcsr.indices'] = mpsharedmem.fromarray(self.Rcsr.indices)
+                self._mpshmem['Rcsr.indptr'] = mpsharedmem.fromarray(self.Rcsr.indptr)
+                self._mpshmem['Rcsr.data'] = mpsharedmem.fromarray(self.Rcsr.data)
+                self._mpshmem['Rcsr.shape'] = self.Rcsr.shape
+            
+            del self.wave
+            del self.flux
+            del self.ivar
             del self.R
-
-            self._csrshape = self.Rcsr.shape
-            self.Rcsr_indices = mp_array(self.Rcsr.indices)
-            self.Rcsr_indptr = mp_array(self.Rcsr.indptr)
-            self.Rcsr_data = mp_array(self.Rcsr.data)
             del self.Rcsr
 
             self._mpshared = True
+            
         return
 
     def sharedmem_unpack(self):
         """Unpack spectral data from multiprocessing shared memory.
         """
         if self._mpshared:
-            self.wave = np.array(self.wave)
-            self.flux = np.array(self.flux)
-            self.ivar = np.array(self.ivar)
+            self.wave = mpsharedmem.toarray(self._mpshmem['wave'])
+            self.flux = mpsharedmem.toarray(self._mpshmem['flux'])
+            self.ivar = mpsharedmem.toarray(self._mpshmem['ivar'])
 
-            self.R = scipy.sparse.dia_matrix((np.array(self.R_data),
-                np.array(self.R_offsets)), shape=(self._splen, self._splen))
-            del self.R_data
-            del self.R_offsets
+            Rdata = mpsharedmem.toarray(self._mpshmem['R.data'])
+            Roffsets = self._mpshmem['R.offsets']
+            Rshape = self._mpshmem['R.shape']
+            self.R = scipy.sparse.dia_matrix((Rdata, Roffsets),
+                shape=Rshape, copy=False)
 
-            self.Rcsr = scipy.sparse.csr_matrix((np.array(self.Rcsr_data),
-                np.array(self.Rcsr_indices), np.array(self.Rcsr_indptr)),
-                shape=self._csrshape)
-            del self.Rcsr_data
-            del self.Rcsr_indices
-            del self.Rcsr_indptr
+            data = mpsharedmem.toarray(self._mpshmem['Rcsr.data'])
+            indices = mpsharedmem.toarray(self._mpshmem['Rcsr.indices'])
+            indptr = mpsharedmem.toarray(self._mpshmem['Rcsr.indptr'])
+            shape = self._mpshmem['Rcsr.shape']
+            
+            self.Rcsr = scipy.sparse.csr_matrix((data, indices, indptr),
+                shape=shape, copy=False)
 
             self._mpshared = False
         return

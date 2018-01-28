@@ -168,7 +168,7 @@ def mp_array(original):
     raw = mp.RawArray(typecode, original.ravel())
     nd = np.array(raw, dtype=typecode, copy=False).view()
     nd.shape = shape
-    return nd
+    return nd, raw
 
 
 def distribute_work(nproc, ids, weights=None):
