@@ -52,16 +52,21 @@ class Spectrum(object):
             self.ivar = mp_array(self.ivar)
 
             self._ndiag = self.R.data.shape[0]
-            self._splen = self.R.data.shape[1]
+# MWL kludge for allowing number of spectra = 1
+#            self._splen = self.R.data.shape[1]
+            try:
+                self._splen = self.R.data.shape[1]
+            except IndexError:
+                self._splen = 1
             self.R_offsets = mp_array(self.R.offsets)
             self.R_data = mp_array(self.R.data)
-            del self.R
+#            del self.R
 
             self._csrshape = self.Rcsr.shape
             self.Rcsr_indices = mp_array(self.Rcsr.indices)
             self.Rcsr_indptr = mp_array(self.Rcsr.indptr)
             self.Rcsr_data = mp_array(self.Rcsr.data)
-            del self.Rcsr
+#            del self.Rcsr
 
             self._mpshared = True
         return

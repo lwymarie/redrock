@@ -101,8 +101,13 @@ class PlotSpec(object):
         fulltype = zz['spectype']
         if zz['subtype'] != '':
             fulltype = fulltype+':::'+zz['subtype']
-        tp = self.templates[fulltype]
-
+#MWL kludge; list of templates does not support indexing with numpy.string
+#        tp = self.templates[fulltype]
+        for idx,tp in enumerate(self.templates):
+            if (tp.template_type == zz['spectype']) & (tp.sub_type == zz['subtype']):
+                break
+        tp = self.templates[idx]
+   
         if tp.template_type != zz['spectype']:
             raise ValueError('spectype {} not in'
                 ' templates'.format(zz['spectype']))
